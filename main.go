@@ -211,7 +211,7 @@ func (a *Analyse) analyseFile() {
 				fmt.Println("stop tail file: ", a.lastReadFile)
 				return
 			} else {
-				fmt.Println("time diff: ", time.Now().Unix()-fileCreateTime.Unix())
+				fmt.Printf("time diff: %d \n\n", time.Now().UTC().Unix()-fileCreateTime.Unix())
 			}
 		}
 	}
