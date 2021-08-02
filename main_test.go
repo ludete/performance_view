@@ -36,10 +36,15 @@ func TestAnalyse_Start(t *testing.T) {
 }
 
 func TestParseTime(t *testing.T) {
-	//data := "2021-08-01 18:19:26.489"
+	data := "2021-08-01 18:19:26.489"
 	//timeData, err := time.Parse("2006-01-02 15:04:05.000", data)
-	data := "2021080118"
-	timeData, err := time.Parse("2006010215", data)
+	l, err := time.LoadLocation("Asia/Shanghai")
 	require.NoError(t, err)
-	fmt.Println(timeData.String())
+	ti, err := time.ParseInLocation("2006-01-02 15:04:05.000", data, l)
+	fmt.Println(ti.String())
+
+	//data := "2021080118"
+	//timeData, err := time.Parse("2006010215", data)
+	//require.NoError(t, err)
+	//fmt.Println(timeData.String())
 }

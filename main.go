@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -30,7 +31,7 @@ func main() {
 		panic("the log dir is null")
 	}
 
-	analyseLogic := NewAnalyse(dir, "system.log", "2006010215", collectTime)
+	analyseLogic := NewAnalyse(dir, "system.log", "2006010215", "2006-01-02 15:04:05.000", collectTime)
 	if err := analyseLogic.Start(); err != nil {
 		panic(err)
 	}
@@ -50,7 +51,8 @@ type Analyse struct {
 
 	dir            string
 	filePrefix     string
-	timeFormat     string
+	fileTimeFormat string
+	lineTimeFormat string
 	collectionTime int64
 
 	tailFile             *tail.Tail
@@ -58,11 +60,12 @@ type Analyse struct {
 	commitBlkMatchRegexp *regexp.Regexp
 }
 
-func NewAnalyse(dir, filePrefix, timeFormat string, collectT int) *Analyse {
+func NewAnalyse(dir, filePrefix, fileTimeFormat, lineTimeFormat string, collectT int) *Analyse {
 	return &Analyse{
 		dir:            dir,
 		filePrefix:     filePrefix,
-		timeFormat:     timeFormat,
+		fileTimeFormat: fileTimeFormat,
+		lineTimeFormat: lineTimeFormat,
 		collectionTime: int64(collectT),
 		records:        make([]Point, 0, 10000),
 	}
@@ -92,27 +95,29 @@ func (a *Analyse) tailDir() {
 }
 
 func (a *Analyse) getNextFile() {
+	defer func() {
+		fmt.Println("next read file: ", a.lastReadFile)
+	}()
+
 	for {
 		fileNames := a.sortFiles(a.readDir())
 		fmt.Println(fileNames)
 		for i, name := range fileNames {
 			if name == a.lastReadFile {
 				if i == len(fileNames)-1 {
-					time.Sleep(time.Minute)
 					fmt.Println("wait next file ....")
-					continue
+					time.Sleep(time.Second)
+					break
 				} else {
 					a.lastReadFile = fileNames[i+1]
-					break
+					return
 				}
 			}
 			if a.lastReadFile == "" {
 				a.lastReadFile = name
-				break
+				return
 			}
 		}
-		fmt.Println("next read file: ", a.lastReadFile)
-		break
 	}
 }
 
@@ -136,11 +141,11 @@ func (a *Analyse) sortFiles(fileNames []string) []string {
 	sort.Slice(fileNames, func(i, j int) bool {
 		leftFileTime := fileNames[i][len(a.filePrefix)+1:]
 		rightFileTime := fileNames[i][len(a.filePrefix)+1:]
-		left, err := time.Parse(a.timeFormat, leftFileTime)
+		left, err := time.Parse(a.fileTimeFormat, leftFileTime) // utc
 		if err != nil {
 			panic(fmt.Sprintf("parse time: %s error, failed reason: %s", leftFileTime, err))
 		}
-		right, err := time.Parse(a.timeFormat, rightFileTime)
+		right, err := time.Parse(a.fileTimeFormat, rightFileTime) // utc
 		if err != nil {
 			panic(fmt.Sprintf("parse time: %s error, failed reason: %s", rightFileTime, err))
 		}
@@ -155,18 +160,24 @@ func (a *Analyse) analyseFile() {
 		totalCount = 0
 		lastTime   *time.Time
 
-		format     = "2006-01-02 15:04:05.000"
-		timeLength = len(format)
+		//format     = "2006-01-02 15:04:05.000"
+		timeLength = len(a.lineTimeFormat)
 		ticker     = time.NewTicker(time.Second)
+
+		firstComplete bool
 	)
 	defer ticker.Stop()
+	l, err := time.LoadLocation("Asia/Shanghai")
+	if err != nil {
+		panic(err)
+	}
 
 	for {
 		select {
 		case line := <-a.tailFile.Lines:
 			if ok := a.commitBlkMatchRegexp.MatchString(line.Text); ok {
 				//fmt.Println(line.Text)
-				lineTime, err := time.Parse(format, line.Text[:timeLength])
+				lineTime, err := time.Parse(a.lineTimeFormat, line.Text[:timeLength])
 				if err != nil {
 					panic(fmt.Errorf("parse time: %s error: %s", line.Text[:timeLength], err))
 				}
@@ -174,10 +185,9 @@ func (a *Analyse) analyseFile() {
 				if len(txCountRecord) == 0 {
 					panic(fmt.Errorf("not find txCount in log: %s", line.Text))
 				}
-				txCountStr := txCountRecord[6:len(txCountRecord)]
-				txCount, err := strconv.Atoi(txCountStr)
+				txCount, err := strconv.Atoi(txCountRecord[6:])
 				if err != nil {
-					panic(fmt.Errorf("parse txcount: %s failed reason: %s", txCountStr, err))
+					panic(fmt.Errorf("parse txcount: %s failed reason: %s", txCountRecord[6:], err))
 				}
 
 				// calculate logic
@@ -199,19 +209,38 @@ func (a *Analyse) analyseFile() {
 				//}
 			}
 		case <-ticker.C:
-			fileCreateTime, err := time.Parse(a.timeFormat, a.lastReadFile[len(a.timeFormat)+1:])
+			if len(a.lastReadFile) == 0 {
+				continue
+			}
+			offset, err := a.tailFile.Tell()
 			if err != nil {
 				panic(err)
 			}
-			fmt.Println("now: ", time.Now().UTC().String(), "fileCreateTime: ", fileCreateTime.String(), "diff: ", time.Now().UTC().Unix()-fileCreateTime.Unix())
-			if time.Now().UTC().Unix()-fileCreateTime.Unix() >= 3600 {
+			if fileInfo, err := os.Stat(filepath.Join(a.dir, a.lastReadFile)); err == nil && offset < fileInfo.Size() {
+				fmt.Println("file not read complete")
+				continue
+			} else if err != nil {
+				panic(err)
+			}
+
+			if !firstComplete {
+				firstComplete = true
+				continue
+			}
+			//fileCreateTime, err := time.Parse(a.timeFormat, a.lastReadFile[len(a.timeFormat)+1:])
+			fileCreateTime, err := time.ParseInLocation(a.fileTimeFormat, a.lastReadFile[len(a.filePrefix)+1:], l)
+			if err != nil {
+				panic(err)
+			}
+			fmt.Println("now: ", time.Now().String(), ", fileCreateTime: ", fileCreateTime.String(), ", diff: ", time.Now().Unix()-fileCreateTime.Unix())
+			if diff := time.Now().Unix() - fileCreateTime.Unix(); diff >= 3600 {
 				if err := a.tailFile.Stop(); err != nil {
 					panic(err)
 				}
-				fmt.Println("stop tail file: ", a.lastReadFile)
+				fmt.Printf("stop tail file: %s \n\n", a.lastReadFile)
 				return
 			} else {
-				fmt.Printf("time diff: %d \n\n", time.Now().UTC().Unix()-fileCreateTime.Unix())
+				fmt.Printf("time diff: %d \n\n", diff)
 			}
 		}
 	}
