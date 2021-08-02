@@ -1,4 +1,4 @@
-module github.com/ludete/performance_view.git
+module github.com/ludete/performance_view
 
 go 1.15
 
