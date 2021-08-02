@@ -203,8 +203,8 @@ func (a *Analyse) analyseFile() {
 			if err != nil {
 				panic(err)
 			}
-			fmt.Println("now: ", time.Now().String(), "fileCreateTime: ", fileCreateTime.String())
-			if time.Now().Unix()-fileCreateTime.Unix() >= 3600 {
+			fmt.Println("now: ", time.Now().UTC().String(), "fileCreateTime: ", fileCreateTime.String(), "diff: ", time.Now().UTC().Unix()-fileCreateTime.Unix())
+			if time.Now().UTC().Unix()-fileCreateTime.Unix() >= 3600 {
 				if err := a.tailFile.Stop(); err != nil {
 					panic(err)
 				}
