@@ -257,17 +257,10 @@ func (a *Analyse) viewPerformance(w http.ResponseWriter, _ *http.Request) {
 	line := charts.NewLine()
 	// set some global options like Title/Legend/ToolTip or anything else
 	line.SetGlobalOptions(
+		charts.WithYAxisOpts(opts.YAxis{Name: "tps"}),
+		charts.WithXAxisOpts(opts.XAxis{Name: "seconds"}),
 		charts.WithInitializationOpts(opts.Initialization{Theme: types.ThemeWesteros}),
-		charts.WithTitleOpts(opts.Title{
-			Title: "ChainMaker performance test in guangzhou",
-			//Subtitle: "ChainMaker Test",
-		})).SetSeriesOptions(
-		//charts.WithLineStyleOpts(),
-		//charts.WithLineChartOpts(),
-
-		charts.WithMarkLineNameXAxisItemOpts(opts.MarkLineNameXAxisItem{Name: "minute"}),
-		charts.WithMarkLineNameTypeItemOpts(opts.MarkLineNameTypeItem{Name: "minute"}),
-		charts.WithMarkLineNameYAxisItemOpts(opts.MarkLineNameYAxisItem{Name: "tps"}),
+		charts.WithTitleOpts(opts.Title{Title: "ChainMaker performance test in guangzhou"}),
 	)
 
 	x, y := a.getXesAndYes()
