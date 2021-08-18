@@ -76,7 +76,7 @@ func (a *Analyse) Start() error {
 	if a.blockTxCountRegexp, err = regexp.Compile("count:[0-9]+"); err != nil {
 		return err
 	}
-	if a.commitBlkMatchRegexp, err = regexp.Compile("commit block "); err != nil {
+	if a.commitBlkMatchRegexp, err = regexp.Compile(`commit block \[`); err != nil {
 		return err
 	}
 	go a.tailDir()
@@ -260,7 +260,7 @@ func (a *Analyse) viewPerformance(w http.ResponseWriter, _ *http.Request) {
 		charts.WithYAxisOpts(opts.YAxis{Name: "tps"}),
 		charts.WithXAxisOpts(opts.XAxis{Name: "seconds"}),
 		charts.WithInitializationOpts(opts.Initialization{Theme: types.ThemeWesteros}),
-		charts.WithTitleOpts(opts.Title{Title: "ChainMaker performance test in guangzhou"}),
+		charts.WithTitleOpts(opts.Title{Title: "ChainMaker Performance Test"}),
 	)
 
 	x, y := a.getXesAndYes()
